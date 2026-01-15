@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Forca Kids da Lavine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            touch-action: none;
+            overflow: hidden;
+            background: linear-gradient(180deg, #A9C9FF 0%, #FFBBEC 100%);
+            height: 100dvh;
+            width: 100vw;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .game-font {
+            font-family: 'Fredoka One', cursive;
+        }
+
+        /* Área do Boneco */
+        .face-container {
+            transition: all 0.3s ease;
+        }
+
+        /* Slots da Palavra */
+        .word-slot {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 0 rgba(0,0,0,0.1);
+        }
+
+        .word-slot.empty {
+            border: 4px dashed #9ca3af;
+            background-color: rgba(255, 255, 255, 0.5);
+            color: transparent;
+        }
+
+        .word-slot.filled {
+            border: 4px solid #fff;
+            background-color: #fff;
+            color: #ec4899;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .word-slot.highlight {
+            border-color: #fbbf24;
+            background-color: #fef3c7;
+            transform: scale(1.1);
+        }
+
+        /* Letras Arrastáveis */
+        .draggable-letter {
+            cursor: grab;
+            touch-action: none;
+            transition: transform 0.1s, box-shadow 0.2s;
+            background: white;
+            border: 3px solid white;
+            box-shadow: 0 6px 0 #e5e7eb;
+        }
+
+        .draggable-letter:active {
+            cursor: grabbing;
+            transform: scale(1.1);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            z-index: 50;
+        }
+
+        .draggable-letter.correct {
+            background-color: #86efac;
+            border-color: #22c55e;
+            color: #15803d;
+        }
+
+        .draggable-letter.wrong {
+            animation: shake 0.5s;
+            background-color: #fca5a5;
+            border-color: #ef4444;
+            color: #991b1b;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px) rotate(-5deg); }
+            75% { transform: translateX(5px) rotate(5deg); }
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            80% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        /* SVG Parts Animation */
+        .face-part {
+            opacity: 0;
+            transform-origin: center;
+            transform: scale(0);
+            transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .face-part.visible {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .bounce-face {
+            animation: bounceFace 0.5s infinite alternate;
+        }
+        @keyframes bounceFace {
+            from { transform: translateY(0); }
+            to { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body class="flex flex-col h-full">
+
+    <!-- Header -->
+    <div class="flex-none p-4 flex justify-between items-center z-10 bg-white/30 backdrop-blur-sm shadow-sm">
+        <div class="flex items-center gap-3">
+            <span class="text-3xl md:text-4xl animate-bounce">🤡</span>
+            <h1 class="text-xl md:text-3xl text-purple-700 game-font leading-none">
+                Forca da <span class="text-pink-500">Lavine</span>
+            </h1>
+        </div>
+        <button onclick="toggleSound()" id="soundBtn" class="bg-white/80 p-3 rounded-full shadow-md active:scale-95 transition-all text-2xl">
+            🔊
+        </button>
+    </div>
+
+    <!-- Área Principal -->
+    <div class="flex-grow flex flex-col items-center justify-between p-2 md:p-4 relative">
+        
+        <!-- O Boneco (Área de Feedback) -->
+        <div class="flex-grow flex items-center justify-center w-full max-h-[40vh] mb-2">
+            <div class="relative w-64 h-64 md:w-80 md:h-80 bg-white/40 rounded-full shadow-2xl border-8 border-white face-container" id="faceBase">
+                <!-- Rosto Base (Sempre visível) -->
+                <svg viewBox="0 0 200 200" class="w-full h-full overflow-visible">
+                    <!-- Cabeça -->
+                    <circle cx="100" cy="100" r="90" fill="#FFD1DC" />
+                    
+                    <!-- Olhos (Parte 1 - Erro 1) -->
+                    <g id="part-0" class="face-part">
+                        <circle cx="70" cy="80" r="15" fill="white" stroke="#333" stroke-width="3"/>
+                        <circle cx="70" cy="80" r="5" fill="#333"/>
+                        <circle cx="130" cy="80" r="20" fill="white" stroke="#333" stroke-width="3"/>
+                        <circle cx="130" cy="80" r="8" fill="#333"/>
+                    </g>
+
+                    <!-- Nariz (Parte 2 - Erro 2) -->
+                    <g id="part-1" class="face-part">
+                        <circle cx="100" cy="110" r="18" fill="#FF4444" stroke="#990000" stroke-width="2"/>
+                        <circle cx="95" cy="105" r="5" fill="white" opacity="0.5"/>
+                    </g>
+
+                    <!-- Boca (Parte 3 - Erro 3) -->
+                    <g id="part-2" class="face-part">
+                        <path d="M 60 140 Q 100 170 140 140" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+                        <path d="M 55 135 L 65 145 M 135 145 L 145 135" stroke="#333" stroke-width="3" />
+                    </g>
+
+                    <!-- Cabelo Maluco (Parte 4 - Erro 4) -->
+                    <g id="part-3" class="face-part">
+                        <path d="M 30 60 Q 50 10 100 30 T 170 60" stroke="#FFD700" stroke-width="25" fill="none" stroke-linecap="round"/>
+                        <path d="M 40 50 Q 100 -20 160 50" stroke="#FFA500" stroke-width="10" fill="none" stroke-linecap="round"/>
+                    </g>
+
+                    <!-- Gravata (Parte 5 - Erro 5) -->
+                    <g id="part-4" class="face-part">
+                        <path d="M 80 190 L 60 220 L 100 210 L 140 220 L 120 190 Z" fill="#8B5CF6" stroke="white" stroke-width="3"/>
+                        <circle cx="100" cy="190" r="10" fill="#6D28D9"/>
+                    </g>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Palavra a Completar -->
+        <div class="w-full flex flex-col items-center justify-center mb-6 z-20">
+            <!-- Dica Visual -->
+            <div id="wordImage" class="text-6xl mb-4 drop-shadow-lg transition-transform hover:scale-110 cursor-pointer" onclick="speakCurrentWord()">
+                🐱
+            </div>
+            
+            <!-- Slots -->
+            <div id="wordContainer" class="flex gap-2 md:gap-4">
+                <!-- Injetado via JS -->
+            </div>
+        </div>
+
+        <!-- Área de Opções (Drag Drop) -->
+        <div class="w-full bg-white/50 backdrop-blur-md rounded-t-3xl p-6 shadow-[0_-5px_15px_rgba(0,0,0,0.1)]">
+            <p class="text-center text-gray-500 font-bold mb-4 uppercase text-sm tracking-wider">Arraste a letra certa!</p>
+            <div id="optionsContainer" class="flex justify-center gap-4 md:gap-8 flex-wrap min-h-[80px]">
+                <!-- Opções injetadas via JS -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Overlay de Vitória -->
+    <div id="winOverlay" class="hidden absolute inset-0 z-50 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl text-center animate-bounce">
+            <div class="text-8xl mb-4">🌟</div>
+            <h2 class="text-4xl game-font text-pink-500 mb-2">Muito Bem!</h2>
+            <p id="winWordDisplay" class="text-2xl text-gray-600 font-bold mb-6">VOCÊ COMPLETOU!</p>
+            <button onclick="nextLevel()" class="bg-green-500 text-white text-2xl font-bold py-4 px-10 rounded-2xl shadow-[0_6px_0_#15803d] active:shadow-none active:translate-y-1 transition-all">
+                Próxima ➡️
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Configurações do Jogo ---
+        const words = [
+            { word: 'GATO', emoji: '🐱', missing: 0 }, // _ATO
+            { word: 'SOL', emoji: '☀️', missing: 2 },  // SO_
+            { word: 'UVA', emoji: '🍇', missing: 0 },  // _VA
+            { word: 'PATO', emoji: '🦆', missing: 0 }, // _ATO
+            { word: 'BOLA', emoji: '⚽', missing: 3 }, // BOL_
+            { word: 'CASA', emoji: '🏠', missing: 2 }, // CA_A
+            { word: 'LUA', emoji: '🌙', missing: 0 },  // _UA
+            { word: 'FLOR', emoji: '🌸', missing: 3 }, // FLO_
+            { word: 'DADO', emoji: '🎲', missing: 0 }, // _ADO
+            { word: 'PEIXE', emoji: '🐠', missing: 0 } // _EIXE
+        ];
+
+        let currentLevel = 0;
+        let errors = 0;
+        let maxErrors = 5;
+        let isSoundOn = true;
+        let synth = window.speechSynthesis;
+        let draggedItem = null;
+        let initialX, initialY, currentX, currentY, xOffset = 0, yOffset = 0;
+        let activeSlot = null;
+
+        // --- Inicialização ---
+        function initGame() {
+            errors = 0;
+            resetFace();
+            loadLevel();
+            document.getElementById('winOverlay').classList.add('hidden');
+        }
+
+        function loadLevel() {
+            const levelData = words[currentLevel % words.length];
+            const word = levelData.word;
+            const missingIndex = levelData.missing;
+            const correctLetter = word[missingIndex];
+
+            // Setup Imagem
+            document.getElementById('wordImage').textContent = levelData.emoji;
+
+            // Setup Slots da Palavra
+            const container = document.getElementById('wordContainer');
+            container.innerHTML = '';
+
+            for (let i = 0; i < word.length; i++) {
+                const slot = document.createElement('div');
+                slot.className = `word-slot w-16 h-20 md:w-20 md:h-24 rounded-xl flex items-center justify-center text-4xl md:text-5xl game-font font-bold select-none`;
+                
+                if (i === missingIndex) {
+                    slot.classList.add('empty');
+                    slot.dataset.target = correctLetter;
+                    slot.id = 'targetSlot';
+                    slot.textContent = '?';
+                } else {
+                    slot.classList.add('filled', 'shadow-md');
+                    slot.textContent = word[i];
+                }
+                container.appendChild(slot);
+            }
+
+            // Setup Opções (Distratores + Correta)
+            setupOptions(correctLetter);
+            
+            // Narrar
+            setTimeout(() => {
+                speak(`Complete a palavra: ${word}`);
+            }, 500);
+        }
+
+        function setupOptions(correct) {
+            const optionsContainer = document.getElementById('optionsContainer');
+            optionsContainer.innerHTML = '';
+            
+            // Gerar 2 letras erradas aleatórias
+            const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            let options = [correct];
+            while (options.length < 3) {
+                const randomLetter = alphabet[Math.floor(Math.random() * alphabet.length)];
+                if (!options.includes(randomLetter)) options.push(randomLetter);
+            }
+            // Embaralhar
+            options.sort(() => Math.random() - 0.5);
+
+            options.forEach(letter => {
+                const el = document.createElement('div');
+                el.className = 'draggable-letter w-20 h-20 rounded-full flex items-center justify-center text-4xl font-bold game-font text-purple-600 select-none';
+                el.textContent = letter;
+                el.dataset.letter = letter;
+                
+                // Eventos de Mouse e Touch
+                addDragEvents(el);
+                
+                optionsContainer.appendChild(el);
+            });
+        }
+
+        // --- Lógica de Drag and Drop (Mouse + Touch) ---
+        function addDragEvents(el) {
+            // Touch
+            el.addEventListener('touchstart', dragStart, {passive: false});
+            el.addEventListener('touchend', dragEnd, {passive: false});
+            el.addEventListener('touchmove', drag, {passive: false});
+
+            // Mouse
+            el.addEventListener('mousedown', dragStart);
+            el.addEventListener('mouseup', dragEnd);
+            el.addEventListener('mousemove', drag);
+        }
+
+        function dragStart(e) {
+            if (e.target.classList.contains('correct') || e.target.classList.contains('wrong')) return;
+
+            if (e.type === "touchstart") {
+                initialX = e.touches[0].clientX - xOffset;
+                initialY = e.touches[0].clientY - yOffset;
+            } else {
+                initialX = e.clientX - xOffset;
+                initialY = e.clientY - yOffset;
+                e.preventDefault(); // Prevenir seleção de texto
+            }
+
+            if (e.target.classList.contains('draggable-letter')) {
+                draggedItem = e.target;
+                draggedItem.style.zIndex = 100;
+                speakLetter(draggedItem.textContent);
+            }
+        }
+
+        function drag(e) {
+            if (draggedItem) {
+                e.preventDefault();
+
+                let clientX, clientY;
+                if (e.type === "touchmove") {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                } else {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                }
+
+                currentX = clientX - initialX;
+                currentY = clientY - initialY;
+
+                xOffset = currentX;
+                yOffset = currentY;
+
+                setTranslate(currentX, currentY, draggedItem);
+                checkOverlap(draggedItem);
+            }
+        }
+
+        function setTranslate(xPos, yPos, el) {
+            el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0) scale(1.1)`;
+        }
+
+        function dragEnd(e) {
+            initialX = currentX;
+            initialY = currentY;
+
+            if (draggedItem) {
+                const targetSlot = document.getElementById('targetSlot');
+                const isOver = isOverlapping(draggedItem, targetSlot);
+                
+                if (isOver) {
+                    const letter = draggedItem.dataset.letter;
+                    const correct = targetSlot.dataset.target;
+                    
+                    if (letter === correct) {
+                        handleCorrectDrop(draggedItem, targetSlot);
+                    } else {
+                        handleWrongDrop(draggedItem);
+                    }
+                } else {
+                    // Voltar para posição original
+                    resetPosition(draggedItem);
+                }
+                
+                draggedItem.style.zIndex = "";
+                targetSlot.classList.remove('highlight');
+                draggedItem = null;
+                xOffset = 0;
+                yOffset = 0;
+            }
+        }
+
+        function isOverlapping(el1, el2) {
+            const rect1 = el1.getBoundingClientRect();
+            const rect2 = el2.getBoundingClientRect();
+            
+            // Verificar se o centro do elemento arrastado está dentro do alvo
+            const centerX = rect1.left + rect1.width / 2;
+            const centerY = rect1.top + rect1.height / 2;
+
+            return (
+                centerX >= rect2.left &&
+                centerX <= rect2.right &&
+                centerY >= rect2.top &&
+                centerY <= rect2.bottom
+            );
+        }
+
+        function checkOverlap(dragged) {
+            const target = document.getElementById('targetSlot');
+            if (isOverlapping(dragged, target)) {
+                target.classList.add('highlight');
+            } else {
+                target.classList.remove('highlight');
+            }
+        }
+
+        function resetPosition(el) {
+            el.style.transition = "transform 0.3s ease-out";
+            el.style.transform = "translate3d(0, 0, 0)";
+            setTimeout(() => {
+                el.style.transition = "transform 0.1s, box-shadow 0.2s";
+            }, 300);
+        }
+
+        // --- Lógica do Jogo ---
+
+        function handleCorrectDrop(letterEl, slotEl) {
+            // Visual
+            letterEl.style.display = 'none'; // Sumir com a bolinha
+            slotEl.textContent = letterEl.textContent;
+            slotEl.classList.remove('empty', 'highlight');
+            slotEl.classList.add('filled', 'border-green-500', 'text-green-600');
+            
+            // Audio e Confete
+            playSound('success');
+            speak("Isso aí! Muito bem!");
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
+
+            // Vitória
+            setTimeout(() => {
+                const word = words[currentLevel % words.length].word;
+                document.getElementById('winWordDisplay').textContent = word;
+                document.getElementById('winOverlay').classList.remove('hidden');
+                speak(`Você completou: ${word}`);
+            }, 1000);
+        }
+
+        function handleWrongDrop(letterEl) {
+            // Visual
+            letterEl.classList.add('wrong');
+            resetPosition(letterEl);
+            
+            // Audio
+            playSound('error');
+            speak("Ops! Tente outra.");
+            
+            // Adicionar parte ao rosto
+            addFacePart();
+
+            setTimeout(() => {
+                letterEl.classList.remove('wrong');
+            }, 500);
+        }
+
+        function addFacePart() {
+            if (errors < maxErrors) {
+                const part = document.getElementById(`part-${errors}`);
+                if (part) {
+                    part.classList.add('visible');
+                    // Animação de "boing" no rosto
+                    document.getElementById('faceBase').classList.add('bounce-face');
+                    setTimeout(() => document.getElementById('faceBase').classList.remove('bounce-face'), 500);
+                }
+                errors++;
+            } else {
+                // Cheio de caretas - não perde, só reseta as partes pra ficar brincando
+                speak("Olha que careta maluca! Vamos limpar.");
+                setTimeout(resetFace, 1500);
+            }
+        }
+
+        function resetFace() {
+            document.querySelectorAll('.face-part').forEach(part => {
+                part.classList.remove('visible');
+            });
+            errors = 0;
+        }
+
+        function nextLevel() {
+            currentLevel++;
+            initGame();
+        }
+
+        // --- Áudio ---
+        function toggleSound() {
+            isSoundOn = !isSoundOn;
+            document.getElementById('soundBtn').textContent = isSoundOn ? '🔊' : '🔇';
+        }
+
+        function speak(text) {
+            if (!isSoundOn) return;
+            synth.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            utterance.rate = 1.1;
+            synth.speak(utterance);
+        }
+
+        function speakLetter(char) {
+            if (!isSoundOn) return;
+            // Mapa fonético simples
+            const sounds = { 'A': 'Á', 'E': 'É', 'O': 'Ó', 'I': 'Í', 'U': 'Ú' };
+            const text = sounds[char] || char;
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'pt-BR';
+            synth.speak(utterance);
+        }
+
+        function speakCurrentWord() {
+            const word = words[currentLevel % words.length].word;
+            speak(word);
+        }
+
+        function playSound(type) {
+            if (!isSoundOn) return;
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.5);
+            } else {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+
+        // Iniciar
+        window.onload = initGame;
+
+    </script>
+</body>
+</html>
